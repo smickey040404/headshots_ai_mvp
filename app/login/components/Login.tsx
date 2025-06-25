@@ -9,6 +9,7 @@ import disposableDomains from "disposable-email-domains";
 import { useState } from "react";
 import { SubmitHandler, useForm } from "react-hook-form";
 import { AiOutlineGoogle } from "react-icons/ai";
+import { createSupabaseClient } from "@/lib/supabaseConfig";
 
 type Inputs = {
   email: string;
@@ -23,7 +24,7 @@ export const Login = ({
   host: string | null;
   searchParams?: { [key: string]: string | string[] | undefined };
 }) => {
-  const supabase = createClientComponentClient<Database>();
+  const supabase = createSupabaseClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [confirmEmailSent, setConfirmEmailSent] = useState(false);
@@ -75,7 +76,7 @@ export const Login = ({
         });
       } else {
         // Sign in with email and password
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: signInData, error } = await supabase.auth.signInWithPassword({
           email: data.email,
           password: data.password,
         });
@@ -87,6 +88,19 @@ export const Login = ({
             variant: "destructive",
             duration: 5000,
           });
+          return;
+        }
+
+        // If login is successful, show toast and redirect
+        if (signInData?.session) {
+          toast({
+            title: "Login successful",
+            description: "Redirecting you to the dashboard...",
+            duration: 2000,
+          });
+          
+          // Redirect to the dashboard after successful login
+          window.location.href = "/overview";
         }
       }
     } catch (error: any) {

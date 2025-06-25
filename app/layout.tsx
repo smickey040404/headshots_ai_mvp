@@ -7,6 +7,7 @@ import AnnouncementBar from "@/components/homepage/announcement-bar"
 import { Analytics } from "@vercel/analytics/react";
 import { ThemeProvider } from "@/components/homepage/theme-provider"
 import { validateConfig } from "@/lib/config";
+import SessionManager from "@/components/SessionManager";
 
 // Validate configuration at app initialization
 validateConfig();
@@ -31,6 +32,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen flex flex-col bg-background">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <SessionManager />
           <AnnouncementBar />
           {/* Remove the section wrapper as it's interfering with sticky positioning */}
           <Suspense
