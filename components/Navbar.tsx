@@ -1,5 +1,4 @@
 import { AvatarIcon } from "@radix-ui/react-icons";
-import { Camera } from "lucide-react"
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import {
@@ -40,8 +39,7 @@ export default async function Navbar() {
     <header className="sticky top-0 z-[100] w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
         <Link href="/" className="flex items-center gap-2 font-bold text-xl">
-          <Camera className="h-5 w-5 text-primary" />
-          <span>Headshots AI</span>
+          <span>Headshots AI MVP</span>
         </Link>
         
         {user && (

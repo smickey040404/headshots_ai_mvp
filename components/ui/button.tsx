@@ -51,7 +51,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {...props}
       >
         {isLoading ? (
-          <span className="mr-2 h-4 w-4 animate-spin">⏳</span>
+          <span className="mr-2 h-4 w-4 animate-spin">↻</span>
         ) : null}
         {props.children}
       </Comp>
