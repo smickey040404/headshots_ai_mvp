@@ -26,7 +26,7 @@ export default function ClientSideModel({
 }: ClientSideModelProps) {
   const supabase = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL as string,
-    process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY as string
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
   );
   const [model, setModel] = useState<modelRow>(serverModel);
   const [previewImage, setPreviewImage] = useState<string | null>(null);

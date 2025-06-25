@@ -27,6 +27,7 @@ import { useCallback, useState, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { SubmitHandler, useForm } from "react-hook-form";
 import { FaFemale, FaImages, FaMale, FaRainbow } from "react-icons/fa";
+import { Loader2, CheckCircle2 } from "lucide-react";
 import * as z from "zod";
 import { fileUploadFormSchema } from "@/types/zod";
 import { upload } from "@vercel/blob/client";
@@ -41,6 +42,10 @@ const stripeIsConfigured = process.env.NEXT_PUBLIC_STRIPE_IS_ENABLED === "true";
 export default function TrainModelZone({ packSlug }: { packSlug: string }) {
   const [files, setFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [totalFiles, setTotalFiles] = useState<number>(0);
+  const [uploadedFiles, setUploadedFiles] = useState<number>(0);
+  const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [characteristics, setCharacteristics] = useState<ImageInspectionResult[]>([]);
   const { toast } = useToast();
   const router = useRouter();
@@ -123,6 +128,10 @@ export default function TrainModelZone({ packSlug }: { packSlug: string }) {
 
   const trainModel = useCallback(async () => {
     setIsLoading(true);
+    setUploadProgress(0);
+    setTotalFiles(files.length);
+    setUploadedFiles(0);
+    
     try {
       // Upload each file to Vercel blob and store the resulting URLs
       const blobUrls = [];
@@ -139,12 +148,17 @@ export default function TrainModelZone({ packSlug }: { packSlug: string }) {
 
       if (files) {
         try {
-          for (const file of files) {
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
             const blob = await upload(file.name, file, {
               access: "public",
               handleUploadUrl: "/astria/train-model/image-upload",
             });
             blobUrls.push(blob.url);
+            
+            // Update progress
+            setUploadedFiles(i + 1);
+            setUploadProgress(Math.round(((i + 1) / files.length) * 100));
           }
         } catch (uploadError) {
           console.error("Error uploading images:", uploadError);
@@ -204,14 +218,21 @@ export default function TrainModelZone({ packSlug }: { packSlug: string }) {
         return;
       }
 
+      // Show success state
+      setIsSuccess(true);
+      
       toast({
         title: "Model queued for training",
         description:
-          "The model was queued for training. You will receive an email when the model is ready to use.",
+          "The model was queued for training. You'll be redirected to the overview page.",
         duration: 5000,
       });
 
-      router.push("/overview");
+      // Delay redirect slightly to show success animation
+      setTimeout(() => {
+        router.push("/overview");
+      }, 1500);
+      
     } catch (error) {
       console.error("Unhandled error in trainModel:", error);
       toast({
@@ -221,7 +242,9 @@ export default function TrainModelZone({ packSlug }: { packSlug: string }) {
         duration: 5000,
       });
     } finally {
-      setIsLoading(false);
+      if (!isSuccess) {
+        setIsLoading(false);
+      }
     }
   }, [files, characteristics, form, packSlug, router, toast]);
 
@@ -377,10 +400,61 @@ export default function TrainModelZone({ packSlug }: { packSlug: string }) {
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            Train Model{" "}
-            {stripeIsConfigured && <span className="ml-1">(1 Credit)</span>}
-          </Button>
+          <div className="flex flex-col gap-2">
+            {isLoading && (
+              <div className="w-full bg-gray-100 rounded-full h-2.5 mb-2 dark:bg-gray-700">
+                <div 
+                  className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-in-out" 
+                  style={{ width: `${uploadProgress}%` }}
+                ></div>
+              </div>
+            )}
+            
+            <Button 
+              type="submit" 
+              className="w-full h-12 relative" 
+              disabled={isLoading || isSuccess}
+              variant={isSuccess ? "default" : "default"}
+            >
+              {!isLoading && !isSuccess && (
+                <>
+                  Train Model{" "}
+                  {stripeIsConfigured && <span className="ml-1">(1 Credit)</span>}
+                </>
+              )}
+              
+              {isLoading && (
+                <div className="flex items-center justify-center space-x-2">
+                  {uploadProgress < 100 ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>
+                        Uploading {uploadedFiles}/{totalFiles} images ({uploadProgress}%)
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Initializing training...</span>
+                    </>
+                  )}
+                </div>
+              )}
+              
+              {isSuccess && (
+                <div className="flex items-center justify-center space-x-2 text-white">
+                  <CheckCircle2 className="h-5 w-5" />
+                  <span>Model queued successfully!</span>
+                </div>
+              )}
+            </Button>
+            
+            {isLoading && (
+              <p className="text-xs text-center text-gray-500">
+                Please don't close this window while your images are uploading
+              </p>
+            )}
+          </div>
         </form>
       </Form>
     </div>
