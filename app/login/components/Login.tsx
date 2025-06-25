@@ -9,10 +9,11 @@ import disposableDomains from "disposable-email-domains";
 import { useState } from "react";
 import { SubmitHandler, useForm } from "react-hook-form";
 import { AiOutlineGoogle } from "react-icons/ai";
-import { WaitingForMagicLink } from "./WaitingForMagicLink";
 
 type Inputs = {
   email: string;
+  password: string;
+  confirmPassword?: string;
 };
 
 export const Login = ({
@@ -24,37 +25,79 @@ export const Login = ({
 }) => {
   const supabase = createClientComponentClient<Database>();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isMagicLinkSent, setIsMagicLinkSent] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [confirmEmailSent, setConfirmEmailSent] = useState(false);
+  const [isResetPassword, setIsResetPassword] = useState(false);
   const { toast } = useToast();
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitted },
+    reset
   } = useForm<Inputs>();
 
   const onSubmit: SubmitHandler<Inputs> = async (data) => {
     setIsSubmitting(true);
     try {
-      await signInWithMagicLink(data.email);
-      setTimeout(() => {
-        setIsSubmitting(false);
+      if (isResetPassword) {
+        // Password reset
+        const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
+          redirectTo: `${protocol}://${host}/auth/callback?next=/reset-password`,
+        });
+        
+        if (error) throw error;
+        
+        setConfirmEmailSent(true);
         toast({
-          title: "Email sent",
-          description: "Check your inbox for a magic link to sign in.",
+          title: "Password reset email sent",
+          description: "Check your inbox for a link to reset your password.",
           duration: 5000,
         });
-        setIsMagicLinkSent(true);
-      }, 1000);
-    } catch (error) {
-      setIsSubmitting(false);
+      } else if (isSignUp) {
+        // Sign up with email and password
+        const { error } = await supabase.auth.signUp({
+          email: data.email,
+          password: data.password,
+          options: {
+            emailRedirectTo: `${protocol}://${host}/auth/callback`,
+          },
+        });
+
+        if (error) throw error;
+        
+        setConfirmEmailSent(true);
+        toast({
+          title: "Verification email sent",
+          description: "Please check your inbox to confirm your email address.",
+          duration: 5000,
+        });
+      } else {
+        // Sign in with email and password
+        const { error } = await supabase.auth.signInWithPassword({
+          email: data.email,
+          password: data.password,
+        });
+
+        if (error) {
+          toast({
+            title: "Login failed",
+            description: error.message,
+            variant: "destructive",
+            duration: 5000,
+          });
+        }
+      }
+    } catch (error: any) {
       toast({
         title: "Something went wrong",
         variant: "destructive",
-        description:
-          "Please try again, if the problem persists, contact us at hello@tryleap.ai",
+        description: error?.message || "Please try again or contact support",
         duration: 5000,
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -65,8 +108,6 @@ export const Login = ({
 
   const protocol = host?.includes("localhost") ? "http" : "https";
   const redirectUrl = `${protocol}://${host}/auth/callback`;
-
-  console.log({ redirectUrl });
 
   const signInWithGoogle = async () => {
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -79,22 +120,40 @@ export const Login = ({
     console.log(data, error);
   };
 
-  const signInWithMagicLink = async (email: string) => {
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: redirectUrl,
-      },
-    });
-
-    if (error) {
-      console.log(`Error: ${error.message}`);
-    }
+  const toggleMode = () => {
+    setIsSignUp(!isSignUp);
+    setIsResetPassword(false);
+    reset();
   };
 
-  if (isMagicLinkSent) {
+  const toggleResetPassword = () => {
+    setIsResetPassword(!isResetPassword);
+    setIsSignUp(false);
+    reset();
+  };
+
+  if (confirmEmailSent) {
     return (
-      <WaitingForMagicLink toggleState={() => setIsMagicLinkSent(false)} />
+      <div className="flex items-center justify-center p-8">
+        <div className="flex flex-col gap-4 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 p-4 rounded-xl max-w-sm w-full">
+          <h1 className="text-xl">{isResetPassword ? "Check your email" : "Verify your email"}</h1>
+          <p className="text-sm">
+            {isResetPassword 
+              ? "We've sent you a password reset email. Please check your inbox and click the link to reset your password."
+              : "We've sent you a verification email. Please check your inbox and click the link to confirm your email address."
+            }
+          </p>
+          <p className="text-xs opacity-60">
+            If you don't receive the email within a few minutes, check your spam folder.
+          </p>
+          <Button onClick={() => {
+            setConfirmEmailSent(false);
+            setIsResetPassword(false);
+          }} variant="outline">
+            Back to login
+          </Button>
+        </div>
+      </div>
     );
   }
 
@@ -102,19 +161,34 @@ export const Login = ({
     <>
       <div className="flex items-center justify-center p-8">
         <div className="flex flex-col gap-4 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 p-4 rounded-xl max-w-sm w-full">
-          <h1 className="text-xl">Welcome</h1>
+          <h1 className="text-xl">
+            {isResetPassword 
+              ? "Reset Password"
+              : isSignUp 
+                ? "Create Account" 
+                : "Welcome Back"}
+          </h1>
           <p className="text-xs opacity-60">
-            Sign in or create an account to get started.
+            {isResetPassword
+              ? "Enter your email to receive a password reset link"
+              : isSignUp 
+                ? "Sign up to create your account" 
+                : "Sign in to your account"}
           </p>
-          {/* <Button
-            onClick={signInWithGoogle}
-            variant={"outline"}
-            className="font-semibold"
-          >
-            <AiOutlineGoogle size={20} />
-            Continue with Google
-          </Button>
-          <OR /> */}
+          
+          {!isResetPassword && (
+            <>
+              <Button
+                onClick={signInWithGoogle}
+                variant={"outline"}
+                className="font-semibold"
+              >
+                <AiOutlineGoogle size={20} className="mr-2" />
+                Continue with Google
+              </Button>
+              <OR />
+            </>
+          )}
 
           <form
             onSubmit={handleSubmit(onSubmit)}
@@ -126,14 +200,11 @@ export const Login = ({
                   type="email"
                   placeholder="Email"
                   {...register("email", {
-                    required: true,
+                    required: "Email is required",
                     validate: {
                       emailIsValid: (value: string) =>
                         /^[A-Z0-9._%-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(value) ||
                         "Please enter a valid email",
-                      emailDoesntHavePlus: (value: string) =>
-                        /^[A-Z0-9._%-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(value) ||
-                        "Email addresses with a '+' are not allowed",
                       emailIsntDisposable: (value: string) =>
                         !disposableDomains.includes(value.split("@")[1]) ||
                         "Please use a permanent email address",
@@ -142,22 +213,92 @@ export const Login = ({
                 />
                 {isSubmitted && errors.email && (
                   <span className={"text-xs text-red-400"}>
-                    {errors.email?.message || "Email is required to sign in"}
+                    {errors.email?.message}
                   </span>
                 )}
               </div>
+              
+              {!isResetPassword && (
+                <div className="flex flex-col gap-2">
+                  <Input
+                    type="password"
+                    placeholder="Password"
+                    {...register("password", {
+                      required: "Password is required",
+                      minLength: {
+                        value: 8,
+                        message: "Password must be at least 8 characters",
+                      },
+                    })}
+                  />
+                  {isSubmitted && errors.password && (
+                    <span className={"text-xs text-red-400"}>
+                      {errors.password?.message}
+                    </span>
+                  )}
+                </div>
+              )}
+              
+              {isSignUp && !isResetPassword && (
+                <div className="flex flex-col gap-2">
+                  <Input
+                    type="password"
+                    placeholder="Confirm Password"
+                    {...register("confirmPassword", {
+                      required: "Please confirm your password",
+                      validate: (value) => 
+                        value === watch("password") || "Passwords do not match",
+                    })}
+                  />
+                  {isSubmitted && errors.confirmPassword && (
+                    <span className={"text-xs text-red-400"}>
+                      {errors.confirmPassword?.message}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             <Button
               isLoading={isSubmitting}
               disabled={isSubmitting}
-              variant="outline"
-              className="w-full"
+              variant="default"
+              className="w-full mt-2"
               type="submit"
             >
-              Continue with Email
+              {isResetPassword 
+                ? "Send Reset Link"
+                : isSignUp 
+                  ? "Create Account" 
+                  : "Sign In"}
             </Button>
           </form>
+          
+          <div className="text-center mt-2 space-y-2">
+            {!isResetPassword && (
+              <button 
+                type="button"
+                onClick={toggleMode} 
+                className="text-sm text-primary hover:underline"
+              >
+                {isSignUp 
+                  ? "Already have an account? Sign in" 
+                  : "Don't have an account? Sign up"}
+              </button>
+            )}
+            
+            <div>
+              <button 
+                type="button"
+                onClick={toggleResetPassword} 
+                className="text-sm text-primary hover:underline"
+              >
+                {isResetPassword
+                  ? "Back to login"
+                  : "Forgot your password?"}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </>

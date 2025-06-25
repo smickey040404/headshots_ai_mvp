@@ -123,72 +123,107 @@ export default function TrainModelZone({ packSlug }: { packSlug: string }) {
 
   const trainModel = useCallback(async () => {
     setIsLoading(true);
-    // Upload each file to Vercel blob and store the resulting URLs
-    const blobUrls = [];
+    try {
+      // Upload each file to Vercel blob and store the resulting URLs
+      const blobUrls = [];
 
-    if (files) {
-      for (const file of files) {
-        const blob = await upload(file.name, file, {
-          access: "public",
-          handleUploadUrl: "/astria/train-model/image-upload",
+      if (files.length < 4) {
+        toast({
+          title: "Not enough images",
+          description: "You need to upload at least 4 images to train a model.",
+          duration: 5000,
         });
-        blobUrls.push(blob.url);
+        setIsLoading(false);
+        return;
       }
-    }
 
-    // console.log(blobUrls, "blobUrls");
-    const aggregatedCharacteristics = aggregateCharacteristics(characteristics);
+      if (files) {
+        try {
+          for (const file of files) {
+            const blob = await upload(file.name, file, {
+              access: "public",
+              handleUploadUrl: "/astria/train-model/image-upload",
+            });
+            blobUrls.push(blob.url);
+          }
+        } catch (uploadError) {
+          console.error("Error uploading images:", uploadError);
+          toast({
+            title: "Image upload failed",
+            description: "There was a problem uploading your images. Please try again.",
+            variant: "destructive",
+            duration: 5000,
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
 
-    const payload = {
-      urls: blobUrls,
-      name: form.getValues("name").trim(),
-      type: form.getValues("type"),
-      pack: packSlug,
-      characteristics: aggregatedCharacteristics
-    };
+      const aggregatedCharacteristics = aggregateCharacteristics(characteristics);
 
-    // Send the JSON payload to the "/astria/train-model" endpoint
-    const response = await fetch("/astria/train-model", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+      const payload = {
+        urls: blobUrls,
+        name: form.getValues("name").trim(),
+        type: form.getValues("type"),
+        pack: packSlug,
+        characteristics: aggregatedCharacteristics
+      };
 
-    setIsLoading(false);
+      console.log("Sending payload to train model:", payload);
 
-    if (!response.ok) {
+      // Send the JSON payload to the "/astria/train-model" endpoint
+      const response = await fetch("/astria/train-model", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
       const responseData = await response.json();
-      const responseMessage: string = responseData.message;
-      console.error("Something went wrong! ", responseMessage);
-      const messageWithButton = (
-        <div className="flex flex-col gap-4">
-          {responseMessage}
-          <a href="/get-credits">
-            <Button size="sm">Get Credits</Button>
-          </a>
-        </div>
-      );
+
+      if (!response.ok) {
+        const responseMessage: string = responseData.message || "Unknown error occurred";
+        console.error("Train model API error:", responseData);
+        
+        const messageWithButton = responseMessage.includes("Not enough credits") ? (
+          <div className="flex flex-col gap-4">
+            {responseMessage}
+            <a href="/get-credits">
+              <Button size="sm">Get Credits</Button>
+            </a>
+          </div>
+        ) : responseMessage;
+        
+        toast({
+          title: `Error (${response.status})`,
+          description: messageWithButton,
+          variant: "destructive",
+          duration: 5000,
+        });
+        return;
+      }
+
       toast({
-        title: "Something went wrong!",
-        description: responseMessage.includes("Not enough credits")
-          ? messageWithButton
-          : responseMessage,
+        title: "Model queued for training",
+        description:
+          "The model was queued for training. You will receive an email when the model is ready to use.",
         duration: 5000,
       });
-      return;
+
+      router.push("/overview");
+    } catch (error) {
+      console.error("Unhandled error in trainModel:", error);
+      toast({
+        title: "Something went wrong",
+        description: error instanceof Error ? error.message : "An unexpected error occurred",
+        variant: "destructive",
+        duration: 5000,
+      });
+    } finally {
+      setIsLoading(false);
     }
-
-    toast({
-      title: "Model queued for training",
-      description:
-        "The model was queued for training. You will receive an email when the model is ready to use.",
-      duration: 5000,
-    });
-
-    router.push("/");
-  }, [files, characteristics, form, packSlug]);
+  }, [files, characteristics, form, packSlug, router, toast]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

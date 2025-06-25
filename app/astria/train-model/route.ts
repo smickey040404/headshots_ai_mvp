@@ -6,16 +6,30 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+// Load and validate environment variables
 const astriaApiKey = process.env.ASTRIA_API_KEY;
 const astriaTestModeIsOn = process.env.ASTRIA_TEST_MODE === "true";
 const packsIsEnabled = process.env.NEXT_PUBLIC_TUNE_TYPE === "packs";
-// For local development, recommend using an Ngrok tunnel for the domain
-
 const appWebhookSecret = process.env.APP_WEBHOOK_SECRET;
 const stripeIsConfigured = process.env.NEXT_PUBLIC_STRIPE_IS_ENABLED === "true";
+const deploymentUrl = process.env.DEPLOYMENT_URL || '';
+
+// Log config for debugging
+console.log("Train model API config:", {
+  packsIsEnabled,
+  astriaTestModeIsOn,
+  stripeIsConfigured,
+  hasAstriaApiKey: !!astriaApiKey,
+  hasWebhookSecret: !!appWebhookSecret,
+  deploymentUrl: deploymentUrl || "(not set - will use localhost)",
+});
 
 if (!appWebhookSecret) {
-  throw new Error("MISSING APP_WEBHOOK_SECRET!");
+  console.error("MISSING APP_WEBHOOK_SECRET - Webhook calls from Astria won't work correctly!");
+}
+
+if (!astriaApiKey) {
+  console.error("MISSING ASTRIA_API_KEY - The Astria API integration won't work!");
 }
 
 export async function POST(request: Request) {
@@ -24,7 +38,44 @@ export async function POST(request: Request) {
   const type = payload.type;
   const pack = payload.pack;
   const name = payload.name;
-  const characteristics = payload.characteristics;
+  const characteristics = payload.characteristics || [];
+
+  // Validate required fields
+  if (!images || !Array.isArray(images)) {
+    return NextResponse.json(
+      {
+        message: "Missing or invalid 'urls' field: Must provide an array of image URLs",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (!type) {
+    return NextResponse.json(
+      {
+        message: "Missing 'type' field: Please specify a model type",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (!name) {
+    return NextResponse.json(
+      {
+        message: "Missing 'name' field: Please provide a name for the model",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (packsIsEnabled && !pack) {
+    return NextResponse.json(
+      {
+        message: "Missing 'pack' field: A pack ID is required when using packs mode",
+      },
+      { status: 400 }
+    );
+  }
 
   const supabase = createRouteHandlerClient<Database>({ cookies });
 
@@ -38,18 +89,6 @@ export async function POST(request: Request) {
         message: "Unauthorized",
       },
       { status: 401 }
-    );
-  }
-
-  if (!astriaApiKey) {
-    return NextResponse.json(
-      {
-        message:
-          "Missing API Key: Add your Astria API Key to generate headshots",
-      },
-      {
-        status: 500,
-      }
     );
   }
 
@@ -144,10 +183,16 @@ export async function POST(request: Request) {
   const modelId = data?.id;
 
   try {
-    const deploymentUrl = process.env.DEPLOYMENT_URL || '';
-    const baseUrl = deploymentUrl.startsWith('http://') || deploymentUrl.startsWith('https://') 
-      ? deploymentUrl 
-      : `https://${deploymentUrl}`;
+    let baseUrl;
+    
+    // Special handling for local development
+    if (deploymentUrl.includes('localhost') || deploymentUrl === '') {
+      baseUrl = 'http://localhost:3000';
+    } else {
+      baseUrl = deploymentUrl.startsWith('http://') || deploymentUrl.startsWith('https://') 
+        ? deploymentUrl 
+        : `https://${deploymentUrl}`;
+    }
 
     const trainWebhook = `${baseUrl}/astria/train-webhook`;
     const trainWebhookWithParams = `${trainWebhook}?user_id=${user.id}&model_id=${modelId}&webhook_secret=${appWebhookSecret}`;
@@ -155,7 +200,7 @@ export async function POST(request: Request) {
     const promptWebhook = `${baseUrl}/astria/prompt-webhook`;
     const promptWebhookWithParams = `${promptWebhook}?user_id=${user.id}&model_id=${modelId}&webhook_secret=${appWebhookSecret}`;
 
-    console.log({ trainWebhookWithParams, promptWebhookWithParams });
+    console.log({ baseUrl, trainWebhookWithParams, promptWebhookWithParams });
     const API_KEY = astriaApiKey;
     const DOMAIN = "https://api.astria.ai";
 
@@ -201,6 +246,11 @@ export async function POST(request: Request) {
       },
     };
 
+    console.log('Sending request to Astria API:', {
+      endpoint: DOMAIN + (packsIsEnabled ? `/p/${pack}/tunes` : "/tunes"),
+      requestBody: packsIsEnabled ? packBody : tuneBody,
+    });
+    
     const response = await axios.post(
       DOMAIN + (packsIsEnabled ? `/p/${pack}/tunes` : "/tunes"),
       packsIsEnabled ? packBody : tuneBody,
@@ -212,10 +262,15 @@ export async function POST(request: Request) {
       }
     );
 
+    console.log('Astria API response:', {
+      status: response.status,
+      data: response.data,
+    });
+
     const { status } = response;
 
     if (status !== 201) {
-      console.error({ status });
+      console.error('Unexpected status code from Astria API:', { status });
       // Rollback: Delete the created model if something goes wrong
       if (modelId) {
         await supabase.from("models").delete().eq("id", modelId);
@@ -237,6 +292,13 @@ export async function POST(request: Request) {
           { status }
         );
       }
+      
+      return NextResponse.json(
+        {
+          message: `Astria API returned status ${status}`,
+        },
+        { status: 500 }
+      );
     }
 
     const { error: samplesError } = await supabase.from("samples").insert(
@@ -278,14 +340,53 @@ export async function POST(request: Request) {
       }
     }
   } catch (e) {
-    console.error(e);
+    console.error('Error while processing request:', e);
+    
     // Rollback: Delete the created model if something goes wrong
     if (modelId) {
-      await supabase.from("models").delete().eq("id", modelId);
+      try {
+        await supabase.from("models").delete().eq("id", modelId);
+        console.log(`Successfully deleted model ID ${modelId} after error`);
+      } catch (deleteError) {
+        console.error(`Failed to delete model ID ${modelId} after error:`, deleteError);
+      }
     }
+    
+    // Provide more specific error messages based on error type
+    if (axios.isAxiosError(e)) {
+      if (e.code === 'ECONNREFUSED' || e.code === 'ENOTFOUND') {
+        return NextResponse.json(
+          {
+            message: "Could not connect to Astria API. Please check your internet connection and try again.",
+          },
+          { status: 503 }
+        );
+      }
+      
+      if (e.response) {
+        // The request was made and the server responded with a status code outside of 2xx
+        return NextResponse.json(
+          {
+            message: `Astria API error: ${e.response.data?.message || e.message || "Unknown error"}`,
+            status: e.response.status,
+          },
+          { status: e.response.status || 500 }
+        );
+      } else if (e.request) {
+        // The request was made but no response was received
+        return NextResponse.json(
+          {
+            message: "No response received from Astria API. Please try again later.",
+          },
+          { status: 504 }
+        );
+      }
+    }
+    
+    // Generic error fallback
     return NextResponse.json(
       {
-        message: "Something went wrong!",
+        message: e instanceof Error ? e.message : "Something went wrong!",
       },
       { status: 500 }
     );

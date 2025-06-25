@@ -15,13 +15,13 @@ export const LoginFail = ({
                         {errorMessage}
                     </p>
                     <p className="text-xs opacity-60">
-                        Hint: Please make sure you open the link on the same device / browser from which you tried to signup.
+                        If you're having trouble logging in, please make sure you're using the correct credentials or request a password reset.
                     </p>
                 </div>
-                <div>
+                <div className="flex flex-col gap-2">
                     <Link href={"/login"}>
                         <div className="max-w-sm mx-auto flex gap-2 text-xs items-center justify-center hover:underline">
-                            <p>Login</p>
+                            <p>Back to Login</p>
                             <ExternalLink size={16} />
                         </div>
                     </Link>

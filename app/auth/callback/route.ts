@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
   const error = requestUrl.searchParams.get("error");
   const next = requestUrl.searchParams.get("next") || "/";
   const error_description = requestUrl.searchParams.get("error_description");
+  const type = requestUrl.searchParams.get("type") || "recovery";
 
   if (error) {
     console.log("error: ", {
@@ -23,32 +24,57 @@ export async function GET(req: NextRequest) {
     const supabase = createRouteHandlerClient<Database>({ cookies });
 
     try {
+      // Exchange the received code for a session
       await supabase.auth.exchangeCodeForSession(code);
 
-      // ater exchanging the code, we should check if the user has a feature-flag row and a credits now, if not, we should create one
+      // If this is an email confirmation after signup, create initial credits for the user
+      if (type === "signup") {
+        const { data: user, error: userError } = await supabase.auth.getUser();
 
-      const { data: user, error: userError } = await supabase.auth.getUser();
+        if (userError || !user) {
+          console.error(
+            "[auth] [confirmation] [500] Error getting user: ",
+            userError
+          );
+          return NextResponse.redirect(
+            `${requestUrl.origin}/login/failed?err=500`
+          );
+        }
 
-      if (userError || !user) {
-        console.error(
-          "[login] [session] [500] Error getting user: ",
-          userError
-        );
-        return NextResponse.redirect(
-          `${requestUrl.origin}/login/failed?err=500`
-        );
+        // Check if the user already has a credits record
+        const { data: existingCredits, error: creditCheckError } = await supabase
+          .from("credits")
+          .select("*")
+          .eq("user_id", user.user.id)
+          .single();
+
+        // If no credits record exists, create one
+        if (!existingCredits && !creditCheckError) {
+          const { error: errorCreatingCredits } = await supabase
+            .from("credits")
+            .insert({
+              user_id: user.user.id,
+              credits: 0,
+            });
+
+          if (errorCreatingCredits) {
+            console.error("[auth] [confirmation] Credits creation error:", errorCreatingCredits);
+          }
+        }
       }
+
+      return NextResponse.redirect(new URL(next, req.url));
     } catch (error) {
       if (isAuthApiError(error)) {
         console.error(
-          "[login] [session] [500] Error exchanging code for session: ",
+          "[auth] [confirmation] [500] Error exchanging code for session: ",
           error
         );
         return NextResponse.redirect(
           `${requestUrl.origin}/login/failed?err=AuthApiError`
         );
       } else {
-        console.error("[login] [session] [500] Something wrong: ", error);
+        console.error("[auth] [confirmation] [500] Something wrong: ", error);
         return NextResponse.redirect(
           `${requestUrl.origin}/login/failed?err=500`
         );
