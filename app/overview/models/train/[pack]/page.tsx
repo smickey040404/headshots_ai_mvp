@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import Link from "next/link";
 import { FaArrowLeft } from "react-icons/fa";
+import { redirect } from "next/navigation"
 
 const packsIsEnabled = process.env.NEXT_PUBLIC_TUNE_TYPE === "packs";
 
@@ -20,12 +21,10 @@ export default async function Index({ params }: { params: { pack : string } }) {
         id="train-model-container"
         className="flex flex-1 flex-col gap-2 px-2"
       >
-        <Link href={packsIsEnabled ? "/overview/packs" : "/overview"} className="text-sm w-fit">
-          <Button variant={"outline"}>
+          <Button variant={"outline"} onClick={() => packsIsEnabled ? redirect("/overview/packs") : redirect("/overview")}>
             <FaArrowLeft className="mr-2" />
             Go Back
           </Button>
-        </Link>
         <Card>
           <CardHeader>
             <CardTitle>Train Model</CardTitle>
