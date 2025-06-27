@@ -47,8 +47,7 @@ export default function ClientSideModel({
       supabase.removeChannel(channel);
     };
   }, [supabase, model, setModel]);
-
-  const downloadImage = async (imageUrl: string, filename: string) => {
+  const downloadImage = (imageUrl: string, filename: string) => {
     try {
       // Instead of directly fetching the image, use our proxy API
       const proxyUrl = `/api/download-image?url=${encodeURIComponent(imageUrl)}`;
@@ -73,9 +72,9 @@ export default function ClientSideModel({
             <div className="flex w-full lg:w-1/2 flex-col gap-2">
               <h2 className="text-xl">Training Data</h2>
               <div className="flex flex-row gap-4 flex-wrap">
-                {samples.map((sample) => (
+                {samples.map((sample, index) => (
                   <img
-                    key={sample.id}
+                    key={index}
                     src={sample.uri}
                     className="rounded-md w-60 h-60 object-cover"
                   />
@@ -88,8 +87,8 @@ export default function ClientSideModel({
               <div className="flex flex-1 flex-col gap-2">
                 <h1 className="text-xl">Results</h1>
                 <div className="flex flex-row flex-wrap gap-4">
-                  {serverImages?.map((image) => (
-                    <div key={image.id} className="relative group">
+                  {serverImages?.map((image, index) => (
+                    <div key={index} className="relative group">
                       <img
                         src={image.uri}
                         className="rounded-md w-60 h-60 object-cover"

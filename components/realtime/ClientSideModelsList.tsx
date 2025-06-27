@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { FaImages } from "react-icons/fa";
 import ModelsTable from "../ModelsTable";
+import { decode } from "punycode";
 
 const packsIsEnabled = process.env.NEXT_PUBLIC_TUNE_TYPE === "packs";
 
@@ -14,15 +15,19 @@ export const revalidate = 0;
 
 type ClientSideModelsListProps = {
   serverModels: modelRowWithSamples[] | [];
+  userId: string;
 };
 
 export default function ClientSideModelsList({
   serverModels,
+  userId,
 }: ClientSideModelsListProps) {
   const supabase = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL as string,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
   );
+
+  const [user, setUser] = useState<string>(userId || "");
   const [models, setModels] = useState<modelRowWithSamples[]>(serverModels);
 
   useEffect(() => {
@@ -30,23 +35,25 @@ export default function ClientSideModelsList({
       .channel("realtime-models")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "models" },
-        async (payload: any) => {
-          const samples = await supabase
+        { event: "*", schema: "public", table: "models", filter: `user_id=eq.${user}` },
+        (payload: any) => {
+          console.log("payload", payload.new.id);
+          supabase
             .from("samples")
             .select("*")
-            .eq("modelId", payload.new.id);
+            .eq("modelId", payload.new.id)
+            .then((samplesResult) => {
+              const newModel: modelRowWithSamples = {
+                ...payload.new,
+                samples: samplesResult.data,
+              };
 
-          const newModel: modelRowWithSamples = {
-            ...payload.new,
-            samples: samples.data,
-          };
+              const dedupedModels = models.filter(
+                (model) => model.id !== payload.old?.id
+              );
 
-          const dedupedModels = models.filter(
-            (model) => model.id !== payload.old?.id
-          );
-
-          setModels([...dedupedModels, newModel]);
+              setModels([...dedupedModels, newModel]);
+            });
         }
       )
       .subscribe();

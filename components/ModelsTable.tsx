@@ -20,7 +20,7 @@ type ModelsTableProps = {
   models: modelRowWithSamples[];
 };
 
-export default async function ModelsTable({ models }: ModelsTableProps) {
+export default function ModelsTable({ models }: ModelsTableProps) {
   const router = useRouter();
   const handleRedirect = (id: number) => {
     router.push(`/overview/models/${id}`);
@@ -38,9 +38,9 @@ export default async function ModelsTable({ models }: ModelsTableProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {models?.map((model) => (
+          {models?.map((model, index) => (
             <TableRow
-              key={model.modelId}
+              key={index}
               onClick={() => handleRedirect(model.id)}
               className="cursor-pointer h-16"
             >

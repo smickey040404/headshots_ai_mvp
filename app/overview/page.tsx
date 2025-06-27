@@ -11,7 +11,6 @@ export default async function Index() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
   if (!user) {
     return <div>User not found</div>;
   }
@@ -25,5 +24,5 @@ export default async function Index() {
     )
     .eq("user_id", user.id);
 
-  return <ClientSideModelsList serverModels={models ?? []} />;
+  return <ClientSideModelsList serverModels={models ?? []} userId={user.id} />;
 }
