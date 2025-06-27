@@ -29,6 +29,30 @@ export default function ClientSideModelsList({
 
   const [user, setUser] = useState<string>(userId || "");
   const [models, setModels] = useState<modelRowWithSamples[]>(serverModels);
+  useEffect(()=>{
+    supabase.from("models").select("*").eq("user_id", user).then(({data})=>{
+      if (data) {
+        data.forEach((model)=>{
+        supabase
+            .from("samples")
+            .select("*")
+            .eq("modelId", model.id)
+            .then((samplesResult) => {
+              const newModel: modelRowWithSamples = {
+                ...model,
+                samples: samplesResult.data || [],
+              };
+
+              const dedupedModels = models.filter(
+                (model) => model.id !== model.id
+              );
+
+              setModels([newModel]);
+            });
+        });
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const channel = supabase
