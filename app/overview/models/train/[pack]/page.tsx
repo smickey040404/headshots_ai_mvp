@@ -21,10 +21,12 @@ export default async function Index({ params }: { params: { pack : string } }) {
         id="train-model-container"
         className="flex flex-1 flex-col gap-2 px-2"
       >
-          <Button variant={"outline"} onClick={() => packsIsEnabled ? redirect("/overview/packs") : redirect("/overview")}>
-            <FaArrowLeft className="mr-2" />
-            Go Back
-          </Button>
+          <Link href={packsIsEnabled ? "/overview/packs" : "/overview"} className="text-sm w-fit">
+            <Button variant={"outline"}>
+              <FaArrowLeft className="mr-2" />
+              Go Back
+            </Button>
+          </Link>
         <Card>
           <CardHeader>
             <CardTitle>Train Model</CardTitle>
